@@ -119,19 +119,20 @@ Finally, Fig.~\ref{fig:dp_color_v_color} shows the color-color plots for the sam
 \subsection{Redshift reference sample}
 \label{sec:data:reference}
 
-The \photoz estimation algorithms in RAIL require highly accurate and precise redshift estimates cross-matched to the DP2 photometric catalog to provide labeled \dataset{training} data sets.  We created such datasets using data drawn from publicly available catalogs, comprising galaxies with known spectroscopic redshifts, grism redshifts, and high-quality \photoz's from deep multi-band imaging.  These training sets enable machine learning models within RAIL to learn the mapping between galaxy colors and redshifts, enabling \photoz estimation for every galaxy detected in DP2.  In this subsection, we describe how we assemble the reference redshift catalog, and how we curate it into the training and test sets used in this work.
+The \photoz estimation algorithms in RAIL require highly accurate and precise redshift estimates cross-matched to the DP2 photometric catalog to provide labeled \dataset{training} data sets. We created such datasets using data drawn from publicly available catalogs, comprising galaxies with known spectroscopic redshifts, grism redshifts, and high-quality \photoz estimates from deep, multi-band imaging. These training sets enable machine learning models within RAIL to learn the mapping between galaxy colors and redshifts, thereby enabling \photoz estimation for every galaxy detected in DP2. In this subsection, we describe how we assemble the reference redshift catalog and curate it into the training and test sets used in this work.
 
-We first build a spectroscopic reference sample within the DP2 footprint by concatenating a large compilation of reference redshift catalogs, which we retrieve using the LIneA PZ Server\footnote{\url{https://pzserver.linea.org.br}}.  We then use \textsc{LSDB} to cross-match this compilation against the DP2 object catalog, keeping the nearest photometric counterpart within a fixed matching radius.  The resulting reference set spans both the deep drilling fields, including COSMOS, ELAIS, ECDFS, and EDFS, for which many high-quality redshifts exist, and several wide-field spectroscopic surveys, most notably DESI and SDSS.  In Table~\ref{tab:dp2_refcat}, we report the number of cross-matched galaxies contributed by each survey, listing all surveys with more than 100 objects and grouping the remainder into a single ``Other'' row.  The cross-matched catalog is strongly dominated by the wide-field DESI and SDSS spectroscopic samples and the COSMOS deep-field compilations.  In Fig.~\ref{fig:train_radec}, we show the right-ascension--declination distribution of the training galaxies, color-coded by their originating survey.
+We first built a spectroscopic reference sample within the DP2 footprint by concatenating a large compilation of $\sim$43 million redshifts from 38 reference redshift catalogs using the \texttt{Combine Redshift Catalogs} pipeline\footnote{\url{https://docs.linea.org.br/en/sci-platforms/pz_server_crc.html}} from the LIneA PZ Server\footnote{\url{https://pzserver.linea.org.br}}. The pipeline uses \textsc{LSDB} to perform an efficient all-to-all cross-matching with the reference catalogs to identify multiple measurements of the same objects and resolve these duplicates according to data quality criteria based on previously homogenized quality flags, prioritizing spectroscopic data over grism measurements and grism measurements over high-quality \photoz estimates from multi-band imaging (Gschwend et al., in preparation). As a result, we produced a redshift reference catalog as compilation with redshifts of $\sim$6.6 million unique galaxies from 37 reference surveys (excluding DESI, which was used as an independent test set).     
+
+We then use the \texttt{Training Set Maker} pipeline\footnote{\url{https://docs.linea.org.br/en/sci-platforms/pz_server_tsm.html}}, which also uses \textsc{LSDB} as its back end, to cross-match the compilation and DESI DR1 against the DP2 object catalog, separately, retaining the nearest photometric counterpart within a fixed matching radius of 1.0 arcsec. The resulting reference sets span both the deep drilling fields, including COSMOS, ELAIS, ECDFS, and EDFS, for which many high-quality redshifts exist, and several wide-field spectroscopic surveys, most notably DESI and, for the compilation, SDSS. In Table~\ref{tab:dp2_refcat}, we report the number of cross-matched galaxies contributed by each survey, listing all surveys with more than 100 objects and grouping the remainder into a single ``Other'' row.  The cross-matched catalog is strongly dominated by the wide-field DESI and SDSS spectroscopic samples and the COSMOS deep-field compilations (counted as one reference source). In Fig.~\ref{fig:train_radec}, we show the right-ascension--declination distribution of the training galaxies, color-coded by their originating survey.
 
 \begin{table}[htbp]
 \centering
-\caption{Composition of the reference redshift catalog after cross-matching against the DP2 object catalog.  $N$ is the number of cross-matched objects and $\bar{z}$ is the median redshift.  Type codes: s = spectroscopic, p = many-band \photozs, g = grism.  Surveys with fewer than 100 objects are grouped in the ``Other'' row.}
+\caption{Composition of the reference redshift catalogs after cross-matching against the DP2 object catalog.  $N$ is the number of cross-matched objects and $\bar{z}$ is the median redshift.  Type codes: s = spectroscopic, p = many-band \photozs, g = grism.  Surveys with fewer than 100 objects are grouped in the ``Other'' row.}
 \label{tab:dp2_refcat}
 \begin{tabular}{llrr}
 \hline\hline
 Survey & Type & $N$ & $\bar{z}$ \\
 \hline
-DESI DR1            & s & 1{,}544{,}298 & 0.66 \\
 SDSS DR17           & s &   503{,}965 & 0.50 \\
 COSMOS2020 Classic  & p &   355{,}527 & 1.27 \\
 COSMOS SRC          & s &   176{,}691 & 0.56 \\
@@ -168,7 +169,9 @@ VUDS                & s &       156 & 1.91 \\
 CDB                 & s &       149 & 0.60 \\
 Other ($<$100 each) & --- &     273 & --- \\
 \hline
-Total               &   & 2{,}738{,}386 & \\
+Matched compilation (no DESI) & s,g,p & 1{,}194{,}088 & 0.65 \\
+DESI DR1                      & s & 1{,}544{,}298 & 0.66 \\
+Total                         &   & 2{,}738{,}386 & --- \\
 \hline\hline
 \end{tabular}
 \end{table}
@@ -626,32 +629,232 @@ Dataset type & Description \\
 \subsection{Distribution via the Photo-z Server}
 \label{sec:distribution:linea}
 
-Similar to the RSP, the PZ Server provides an API interface that enables users to access data through Python scripts from any location, provided they know the product name as registered on the server.
 
-If it is the first time using the library, it must be installed via \code{pip} in the terminal or in a notebook cell: \code{pip install --no-cache-dir pzserver}
+\subsubsection{Introducing the PZ Server}
 
-Then, the \code{PzServer} class opens the remote connection to the PZ Server database. An access token is required for authentication. The token can be generated by users on the PZ Server website (top right corner menu on the home page).
+The \href{https://pzserver.linea.org.br}{PZ Server} is an online tool to support \photoz related science in LSST. During the survey operations (DR1 to DR11), the PZ Server will provide access to curated official \photoz-related data products vetted by Rubin DM and data products created by the PZ Server team as part of the Brazilian in-kind contribution program. 
 
-\begin{verbatim}
-from pzserver import PzServer
-pz_server = PzServer(token="<paste your access token here>")
-\end{verbatim}
+For DP1 and DP2, preliminary data products generated by the previous \cite{sitcomtn-154} and this work are available under the "User-generated Data Products" section with suffixes "SITCOMTN-154" and "RTN-124", respectively, in the product names. To facilitate users to find data products of interest, there is also a  \href{https://data.linea.org.br/en/sci_products/pzserver.html}{documentation page} with all the links and useful information organized by DP and product type.   
 
-To display the product metadata and download it to the local working directory (if not in a Jupyter notebook, replace \code{display} for \code{get}).
-\begin{verbatim}
-pz_server.display_product_metadata("<product_id>")
-pz_server.download_product("<product_id>", save_in=".")
-\end{verbatim}
+In addition, similar to the RSP, the PZ Server provides an API interface that enables users to access data through Python scripts from any location, including RSP notebook aspect, provided they know the product name as registered on the server. If it is the first time using the library, it must be installed via \code{pip} in the terminal or in a notebook cell: \code{pip install --no-cache-dir pzserver}
+
+Then, the \code{PzServer} class opens the remote connection to the PZ Server database. An access token is required for authentication. The token can be generated by users on the PZ Server website (top right corner menu on the home page).    
+
+\begin{Verbatim}[commandchars=\\\{\}]
+\textcolor{PineGreen}{from pzserver import PzServer}
+\textcolor{PineGreen}{pz_server = PzServer(token="<paste your access token here>")}
+\end{Verbatim}
+
+To display the product metadata and download it to the local working directory (if not in a Jupyter notebook, replace \code{display} for \code{get}).   
+
+\begin{Verbatim}[commandchars=\\\{\}]
+\textcolor{PineGreen}{pz_server.display_product_metadata("<product_id>")}
+\textcolor{PineGreen}{pz_server.download_product("<product_id>", save_in=".")} 
+\end{Verbatim}
+
+Alternatively, it is possible to load a table directly into memory as Astropy Table. For instance, to get the Combined Redshift Reference Catalog described above, converted into a Pandas DataFrame:
+
+\begin{Verbatim}[commandchars=\\\{\}]
+\textcolor{PineGreen}{z_catalog = pz_server.get_product("318_ref_z_clean_no_desi_lss").to_pandas()}
+\end{Verbatim}
+
+A \href{https://github.com/linea-it/pzserver/blob/main/docs/notebooks/pzserver_tutorial.ipynb}{tutorial notebook} with examples for all \code{pzserver} methods is available on the \code{pzserver} library's repository on GitHub.
+
+\subsubsection{RTN-124 Data Products} 
+
+Links to the data products pages and \texttt{pzserver} library identifiers are provided in Tables~\ref{tab:pzserver-z-compilation} to~\ref{tab:pzserver-gold-6-bands}. 
+
+\begin{table*}
+\centering
+\begin{tabular}{llrr}
+ \hline
+ \multicolumn{4}{c}{Reference Redshift Catalogs} \\ \hline
+Product Name & \texttt{pzserver} library identifier & Source Catalogs & Redshifts \\
+ \hline
+ \hline
+\href{https://pzserver.linea.org.br/product/318_ref_z_clean_no_desi_lss}{\texttt{REF\_Z\_CLEAN\_NO\_DESI\_LSS}} &
+\texttt{318\_ref\_z\_clean\_no\_desi\_lss} &
+37 & 6,616,173 \\ 
+\href{https://pzserver.linea.org.br/product/314_desi_dr1_lite}{\texttt{DESI DR1 LITE}} &
+\texttt{314\_desi\_dr1\_lite} &
+1 &
+28,425,963 \\ 
+\hline
+\end{tabular}
+\caption{Redshift reference catalogs described in Section~\ref{sec:data:reference}, removed duplicates and objects with bad quality (\texttt{homogenized\_flag} $< 3$). The links to all the original reference catalogs are available at the \href{https://data.linea.org.br/en/sci_products/pzserver.html#reference-redshift-catalogs}{PZ Server Data documentation page.}}
+\label{tab:pzserver-z-compilation}
+\end{table*}
 
 
-% Alternatively, it is possible to load a table directly into memory as a Pandas DataFrame or Astropy Table. For instance, to get the Combined Redshift Reference Catalog described above:
+\begin{table*}
+\centering
+\begin{tabular}{llr}
+ \hline
+ \multicolumn{3}{c}{Training and Test Sets} \\ \hline
+Product Name & \texttt{pzserver} library identifier & Redshifts \\
+ \hline
+ \hline
+\href{https://pzserver.linea.org.br/product/417_matched_clean_rtn124}{\texttt{MATCHED\_CLEAN RTN-124}} & \texttt{417\_matched\_clean\_rtn124} & 1,194,088 \\ 
+\href{https://pzserver.linea.org.br/product/418_matched_desi_rtn124}{\texttt{MATCHED\_DESI RTN-124}} & \texttt{418\_matched\_desi\_rtn124} & 1,544,298 \\
+\href{https://pzserver.linea.org.br/product/415_clipped_train_rtn124_parquet}{\texttt{CLIPPED\_TRAIN RTN-124}} & \texttt{415\_clipped\_train\_rtn124\_parquet} &  554,676 \\
+\href{https://pzserver.linea.org.br/product/412_som_test_rtn124_parquet}{\texttt{SOM\_TEST RTN-124}} & \texttt{412\_som\_test\_rtn124\_parquet} & 18,400 \\  
+\hline
+\end{tabular}
+\caption{Raw matched redshift catalogs, clipped train and test sets described in Section~\ref{sec:data:reference}} 
+\label{tab:pzserver-training-and-test-sets}
+\end{table*}
 
-% \begin{verbatim}
-% combined_z_catalog = pz_server.get_product("77_comcam_ecdfs_z_catalog_sitcomtn154")
-% \end{verbatim}
+
+\begin{table*}
+\centering
+\begin{tabular}{ll}
+\hline
+\multicolumn{2}{c}{Gold baseline} \\ \hline
+Product Name & \texttt{pzserver} library identifier \\
+\hline
+\hline
+\href{https://pzserver.linea.org.br/product/419_bpz_model_dp2_gold_baseline_rtn124}
+{BPZ model DP2 gold baseline RTN-124}
+&
+\texttt{419\_bpz\_model\_dp2\_gold\_baseline\_rtn124}
+\\
+\href{https://pzserver.linea.org.br/product/420_dnf_model_dp2_gold_baseline_rtn124}
+{DNF model DP2 gold baseline RTN-124}
+&
+\texttt{420\_dnf\_model\_dp2\_gold\_baseline\_rtn124}
+\\
+\href{https://pzserver.linea.org.br/product/421_flexzboost_model_dp2_gold_baseline_rtn124}
+{FlexZBoost model DP2 gold baseline RTN-124}
+&
+\texttt{421\_flexzboost\_model\_dp2\_gold\_baseline\_rtn124}
+\\
+\href{https://pzserver.linea.org.br/product/422_gpz_model_dp2_gold_baseline_rtn124}
+{GPz model DP2 gold baseline RTN-124}
+&
+\texttt{422\_gpz\_model\_dp2\_gold\_baseline\_rtn124}
+\\
+\href{https://pzserver.linea.org.br/product/423_knn_model_dp2_gold_baseline_rtn124}
+{kNN model DP2 gold baseline RTN-124}
+&
+\texttt{423\_knn\_model\_dp2\_gold\_baseline\_rtn124}
+\\
+\href{https://pzserver.linea.org.br/product/424_lephare_model_dp2_gold_baseline_rtn124}
+{LePhare model DP2 gold baseline RTN-124}
+&
+\texttt{424\_lephare\_model\_dp2\_gold\_baseline\_rtn124}
+\\
+\href{https://pzserver.linea.org.br/product/425_tpz_model_dp2_gold_baseline_rtn124}
+{TPZ model DP2 gold baseline RTN-124}
+&
+\texttt{425\_tpz\_model\_dp2\_gold\_baseline\_rtn124}
+\\
+\hline
+\end{tabular}
+\caption{Gold baseline training results.}
+\label{tab:pzserver-gold-baseline}
+\end{table*}
 
 
-A tutorial notebook with examples for all \code{pzserver} methods is available on the \href{https://github.com/linea-it/pzserver/blob/main/docs/notebooks/pzserver_tutorial.ipynb}{\code{pzserver} library's repository on GitHub}.
+\begin{table*}
+\centering
+\begin{tabular}{ll}
+\hline
+\multicolumn{2}{c}{Gold 4 bands} \\ \hline
+Product Name & \texttt{pzserver} library identifier \\
+\hline
+\hline
+\href{https://pzserver.linea.org.br/product/426_bpz_model_dp2_gold_4_bands_rtn124}
+{BPZ model DP2 gold 4 bands RTN-124}
+&
+\texttt{426\_bpz\_model\_dp2\_gold\_4\_bands\_rtn124}
+\\
+\href{https://pzserver.linea.org.br/product/427_dnf_model_dp2_gold_4_bands_rtn124}
+{DNF model DP2 gold 4 bands RTN-124}
+&
+\texttt{427\_dnf\_model\_dp2\_gold\_4\_bands\_rtn124}
+\\
+\href{https://pzserver.linea.org.br/product/428_flexzboost_model_dp2_gold_4_bands_rtn124}
+{FlexZBoost model DP2 gold 4 bands RTN-124}
+&
+\texttt{428\_flexzboost\_model\_dp2\_gold\_4\_bands\_rtn124}
+\\
+\href{https://pzserver.linea.org.br/product/429_gpz_model_dp2_gold_4_bands_rtn124}
+{GPz model DP2 gold 4 bands RTN-124}
+&
+\texttt{429\_gpz\_model\_dp2\_gold\_4\_bands\_rtn124}
+\\
+\href{https://pzserver.linea.org.br/product/430_knn_model_dp2_gold_4_bands_rtn124}
+{kNN model DP2 gold 4 bands RTN-124}
+&
+\texttt{430\_knn\_model\_dp2\_gold\_4\_bands\_rtn124}
+\\
+\href{https://pzserver.linea.org.br/product/431_lephare_model_dp2_gold_4_bands_rtn124}
+{LePhare model DP2 gold 4 bands RTN-124}
+&
+\texttt{431\_lephare\_model\_dp2\_gold\_4\_bands\_rtn124}
+\\
+\href{https://pzserver.linea.org.br/product/432_tpz_model_dp2_gold_4_bands_rtn124}
+{TPZ model DP2 gold 4 bands RTN-124}
+&
+\texttt{432\_tpz\_model\_dp2\_gold\_4\_bands\_rtn124}
+\\
+\hline
+\end{tabular}
+\caption{Gold 4 bands training results.}
+\label{tab:pzserver-gold-4-bands}
+\end{table*}
+
+
+\begin{table*}
+\centering
+\begin{tabular}{ll}
+\hline
+\multicolumn{2}{c}{Gold 6 bands} \\ \hline
+Product Name & \texttt{pzserver} library identifier \\
+\hline
+\hline
+\href{https://pzserver.linea.org.br/product/433_bpz_model_dp2_gold_6_bands_rtn124}
+{BPZ model DP2 gold 6 bands RTN-124}
+&
+\texttt{433\_bpz\_model\_dp2\_gold\_6\_bands\_rtn124}
+\\
+\href{https://pzserver.linea.org.br/product/434_dnf_model_dp2_gold_6_bands_rtn124}
+{DNF model DP2 gold 6 bands RTN-124}
+&
+\texttt{434\_dnf\_model\_dp2\_gold\_6\_bands\_rtn124}
+\\
+\href{https://pzserver.linea.org.br/product/435_flexzboost_model_dp2_gold_6_bands_rtn124}
+{FlexZBoost model DP2 gold 6 bands RTN-124}
+&
+\texttt{435\_flexzboost\_model\_dp2\_gold\_6\_bands\_rtn124}
+\\
+\href{https://pzserver.linea.org.br/product/436_gpz_model_dp2_gold_6_bands_rtn124}
+{GPz model DP2 gold 6 bands RTN-124}
+&
+\texttt{436\_gpz\_model\_dp2\_gold\_6\_bands\_rtn124}
+\\
+\href{https://pzserver.linea.org.br/product/437_knn_model_dp2_gold_6_bands_rtn124}
+{kNN model DP2 gold 6 bands RTN-124}
+&
+\texttt{437\_knn\_model\_dp2\_gold\_6\_bands\_rtn124}
+\\
+\href{https://pzserver.linea.org.br/product/438_lephare_model_dp2_gold_6_bands_rtn124}
+{LePhare model DP2 gold 6 bands RTN-124}
+&
+\texttt{438\_lephare\_model\_dp2\_gold\_6\_bands\_rtn124}
+\\
+\href{https://pzserver.linea.org.br/product/440_tpz_model_dp2_gold_6_bands_rtn124}
+{TPZ model DP2 gold 6 bands RTN-124}
+&
+\texttt{440\_tpz\_model\_dp2\_gold\_6\_bands\_rtn124}
+\\
+\hline
+\end{tabular}
+\caption{Gold 6 bands training results.}
+\label{tab:pzserver-gold-6-bands}
+\end{table*}
+
+
 
 
 \subsection{Distribution via LSDB}
